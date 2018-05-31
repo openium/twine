@@ -5,157 +5,163 @@ require 'rexml/document'
 module Twine
   module Formatters
     class AndroidTag < Abstract
-      FORMAT_NAME = 'android-tag'
-      EXTENSION = '.xml'
-      DEFAULT_FILE_NAME = 'strings.xml'
-      LANG_CODES = Hash[
-        'zh' => 'zh-Hans',
-        'zh-rCN' => 'zh-Hans',
-        'zh-rHK' => 'zh-Hant',
-        'en-rGB' => 'en-UK',
-        'in' => 'id',
-        'nb' => 'no'
-        # TODO: spanish
-      ]
-      DEFAULT_LANG_CODES = Hash[
-        'zh-TW' => 'zh-Hant' # if we don't have a zh-TW translation, try zh-Hant before en
-      ]
+      include Twine::Placeholders
 
-      def self.can_handle_directory?(path)
+      def format_name
+        'android-tag'
+      end
+
+      def extension
+        '.xml'
+      end
+
+      def can_handle_directory?(path)
         Dir.entries(path).any? { |item| /^values.*$/.match(item) }
       end
 
       def default_file_name
-        return DEFAULT_FILE_NAME
+        'strings.xml'
       end
 
       def determine_language_given_path(path)
         path_arr = path.split(File::SEPARATOR)
         path_arr.each do |segment|
           if segment == 'values'
-            return @strings.language_codes[0]
+            return @twine_file.language_codes[0]
           else
-            match = /^values-(.*)$/.match(segment)
-            if match
-              lang = match[1]
-              lang = LANG_CODES.fetch(lang, lang)
-              lang.sub!('-r', '-')
-              return lang
-            end
+            # The language is defined by a two-letter ISO 639-1 language code, optionally followed by a two letter ISO 3166-1-alpha-2 region code (preceded by lowercase "r").
+            # see http://developer.android.com/guide/topics/resources/providing-resources.html#AlternativeResources
+            match = /^values-([a-z]{2}(-r[a-z]{2})?)$/i.match(segment)
+
+            return match[1].sub('-r', '-') if match
           end
         end
 
         return
       end
 
-      def read_file(path, lang)
-        resources_regex = /<resources(?:[^>]*)>(.*)<\/resources>/m
-        key_regex = /<string name="(\w+)">/
-        comment_regex = /<!-- (.*) -->/
-        value_regex = /<string name="\w+">(.*)<\/string>/
-        key = nil
-        value = nil
+      def output_path_for_language(lang)
+        "values-#{lang}".gsub(/-(\p{Lu})/, '-r\1')
+      end
+
+      def set_translation_for_key(key, lang, value)
+        value = CGI.unescapeHTML(value)
+        value.gsub!('\\\'', '\'')
+        value.gsub!('\\"', '"')
+        value = convert_placeholders_from_android_to_twine(value)
+        value.gsub!('\@', '@')
+        value.gsub!(/(\\u0020)*|(\\u0020)*\z/) { |spaces| ' ' * (spaces.length / 6) }
+        super(key, lang, value)
+      end
+
+      def read(io, lang)
+        document = REXML::Document.new io, :compress_whitespace => %w{ string }
+
         comment = nil
+        document.root.children.each do |child|
+          if child.is_a? REXML::Comment
+            content = child.string.strip
+            comment = content if content.length > 0 and not content.start_with?("SECTION:")
+          elsif child.is_a? REXML::Element
+            next unless child.name == 'string'
 
-        File.open(path, 'r:UTF-8') do |f|
-          content_match = resources_regex.match(f.read)
-          if content_match
-            for line in content_match[1].split(/\r?\n/)
-              key_match = key_regex.match(line)
-              if key_match
-                key = key_match[1]
-                value_match = value_regex.match(line)
-                if value_match
-                  value = value_match[1]
-                  value = CGI.unescapeHTML(value)
-                  value.gsub!('\\\'', '\'')
-                  value.gsub!('\\"', '"')
-                  value = iosify_substitutions(value)
-                  value.gsub!(/(\\u0020)*|(\\u0020)*\z/) { |spaces| ' ' * (spaces.length / 6) }
-                else
-                  value = ""
-                end
-                set_translation_for_key(key, lang, value)
-                if comment and comment.length > 0 and !comment.start_with?("SECTION:")
-                  set_comment_for_key(key, comment)
-                end
-                comment = nil
-              end
+            key = child.attributes['name']
 
-              comment_match = comment_regex.match(line)
-              if comment_match
-                comment = comment_match[1]
-              end
-            end
-          end
+            content = child.children.map(&:to_s).join
+            set_translation_for_key(key, lang, content)
+            set_comment_for_key(key, comment) if comment
+
+            comment = nil
+          end 
         end
       end
 
-      def write_file(path, lang)
-        default_lang = nil
-        if DEFAULT_LANG_CODES.has_key?(lang)
-          default_lang = DEFAULT_LANG_CODES[lang]
-        end
-        File.open(path, 'w:UTF-8') do |f|
-          f.puts "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Android Strings File -->\n<!-- Generated by Twine #{Twine::VERSION} -->\n<!-- Language: #{lang} -->"
-          f.write '<resources>'
-          @strings.sections.each do |section|
-            printed_section = false
-            section.rows.each do |row|
-              if row.matches_tags?(@options[:tags], @options[:untagged])
-                if !printed_section
-                  f.puts ''
-                  if section.name && section.name.length > 0
-                    section_name = section.name.gsub('--', '—')
-                    f.puts "\t<!-- SECTION: #{section_name} -->"
-                  end
-                  printed_section = true
-                end
+      def format_header(lang)
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!-- Android Strings File -->\n<!-- Generated by Twine #{Twine::VERSION} -->\n<!-- Language: #{lang} -->"
+      end
 
-                key = row.key
+      def format_sections(twine_file, lang)
+        result = '<resources>'
+        
+        result += super + "\n"
 
-                value = row.translated_string_for_lang(lang, default_lang)
-                if !value && @options[:include_untranslated]
-                  value = row.translated_string_for_lang(@strings.language_codes[0])
-                end
+        result += "</resources>\n"
+      end
 
-                if value # if values is nil, there was no appropriate translation, so let Android handle the defaulting
-                  value = String.new(value) # use a copy to prevent modifying the original
+      def format_section_header(section)
+        "\t<!-- SECTION: #{section.name} -->"
+      end
 
-                  # Android enforces the following rules on the values
-                  #  1) apostrophes and quotes must be escaped with a backslash
-                  value.gsub!('\'', '\\\\\'')
-                  value.gsub!('"', '\\\\"')
-                  #  2) HTML escape the string
-                  if !value.include?("&#") 
-                    value = CGI.escapeHTML(value)
-                  end
-                  #  3) fix substitutions (e.g. %s/%@)
-                  value = androidify_substitutions(value)
-                  #  4) replace beginning and end spaces with \0020. Otherwise Android strips them.
-                  value.gsub!(/\A *| *\z/) { |spaces| '\u0020' * spaces.length }
+      def format_comment(definition, lang)
+        "\t<!-- #{definition.comment.gsub('--', '—')} -->\n" if definition.comment
+      end
 
-                  comment = row.comment
-                  if comment
-                    comment = comment.gsub('--', '—')
-                  end
+      def key_value_pattern
+        "\t<string name=\"%{key}\" translatable=\"false\">%{value}</string>"
+      end
 
-                  if comment && comment.length > 0
-                    f.puts "\t<!-- #{comment} -->\n"
-                  end
-                  # translatable = ""
-                  # if row.matches_tags?(["notranslation"], false)
-                    translatable = "translatable=\"false\""
-                  # end
-                  f.puts "\t<string name=\"#{key}\" #{translatable}>#{value}</string>"
-                end
-              end
-            end
-          end
-
-          f.puts '</resources>'
+      def gsub_unless(text, pattern, replacement)
+        text.gsub(pattern) do |match|
+          match_start_position = Regexp.last_match.offset(0)[0]
+          yield(text[0, match_start_position]) ? match : replacement
         end
       end
+
+      # http://developer.android.com/guide/topics/resources/string-resource.html#FormattingAndStyling
+      def escape_value(value)
+        inside_cdata = /<\!\[CDATA\[((?!\]\]>).)*$/       # opening CDATA tag ('<![CDATA[') not followed by a closing tag (']]>')
+        inside_opening_anchor_tag = /<a\s?((?!>).)*$/     # anchor tag start ('<a ') not followed by a '>'
+
+        # escape double and single quotes and & signs
+        value = gsub_unless(value, '"', '\\"') { |substring| substring =~ inside_cdata || substring =~ inside_opening_anchor_tag }
+        value = gsub_unless(value, "'", "\\'") { |substring| substring =~ inside_cdata }
+        value = gsub_unless(value, /&/, '&amp;') { |substring| substring =~ inside_cdata || substring =~ inside_opening_anchor_tag }
+
+        # if `value` contains a placeholder, escape all angle brackets
+        # if not, escape opening angle brackes unless it's a supported styling tag
+        # https://github.com/scelis/twine/issues/212
+        # https://stackoverflow.com/questions/3235131/#18199543
+        if number_of_twine_placeholders(value) > 0
+          angle_bracket = /<(?!(\/?(\!\[CDATA)))/           # matches all `<` but <![CDATA
+        else  
+          angle_bracket = /<(?!(\/?(b|u|i|a|\!\[CDATA)))/   # matches all `<` but <b>, <u>, <i>, <a> and <![CDATA
+        end
+        value = gsub_unless(value, angle_bracket, '&lt;') { |substring| substring =~ inside_cdata }
+
+        # escape non resource identifier @ signs (http://developer.android.com/guide/topics/resources/accessing-resources.html#ResourcesFromXml)
+        resource_identifier_regex = /@(?!([a-z\.]+:)?[a-z+]+\/[a-zA-Z_]+)/   # @[<package_name>:]<resource_type>/<resource_name>
+        value.gsub(resource_identifier_regex, '\@')
+      end
+
+      # see http://developer.android.com/guide/topics/resources/string-resource.html#FormattingAndStyling
+      # however unescaped HTML markup like in "Welcome to <b>Android</b>!" is stripped when retrieved with getString() (http://stackoverflow.com/questions/9891996/)
+      def format_value(value)
+        value = value.dup
+
+        # convert placeholders (e.g. %@ -> %s)
+        value = convert_placeholders_from_twine_to_android(value)
+
+        # capture xliff tags and replace them with a placeholder
+        xliff_tags = []
+        value.gsub! /<xliff:g.+?<\/xliff:g>/ do
+          xliff_tags << $&
+          'TWINE_XLIFF_TAG_PLACEHOLDER'
+        end
+
+        # escape everything outside xliff tags
+        value = escape_value(value)
+
+        # put xliff tags back into place
+        xliff_tags.each do |xliff_tag|
+          # escape content of xliff tags
+          xliff_tag.gsub! /(<xliff:g.*?>)(.*)(<\/xliff:g>)/ do "#{$1}#{escape_value($2)}#{$3}" end
+          value.sub! 'TWINE_XLIFF_TAG_PLACEHOLDER', xliff_tag
+        end
+        
+        # replace beginning and end spaces with \u0020. Otherwise Android strips them.
+        value.gsub(/\A *| *\z/) { |spaces| '\u0020' * spaces.length }
+      end
+
     end
   end
 end

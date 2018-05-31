@@ -30,6 +30,7 @@ module Twine
   require 'twine/formatters'
   require 'twine/formatters/abstract'
   require 'twine/formatters/android'
+  require 'twine/formatters/android-tag'
   require 'twine/formatters/apple'
   require 'twine/formatters/django'
   require 'twine/formatters/flash'

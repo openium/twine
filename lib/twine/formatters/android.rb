@@ -96,8 +96,17 @@ module Twine
         "\t<!-- #{definition.comment.gsub('--', '—')} -->\n" if definition.comment
       end
 
+      def format_key_value(definition, lang)
+        translatable = ""
+        if definition.tags.include? "notranslation"
+          translatable = " translatable=\"false\""
+        end
+        value = definition.translation_for_lang(lang)
+        "\t<string name=\"%{key}\"#{translatable}>%{value}</string>" % { key: format_key(definition.key.dup), value: format_value(value.dup) }
+      end
+
       def key_value_pattern
-        "\t<string name=\"%{key}\">%{value}</string>"
+        
       end
 
       def gsub_unless(text, pattern, replacement)

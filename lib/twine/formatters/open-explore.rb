@@ -3,23 +3,25 @@ require 'pathname'
 module Twine
   module Formatters
     class OpenExplore < Abstract
-      FORMAT_NAME = 'open-explore'
-      EXTENSION = '.hm'
-      DEFAULT_FILE_NAME = 'R2KitString+TxtFileName.hm'
+      include Twine::Placeholders
+
+      def format_name
+        'open-explore'
+      end
+
+      def extension
+        '.hm'
+      end
 
       def self.can_handle_directory?(path)
         true
       end
 
       def default_file_name
-        return DEFAULT_FILE_NAME
+        return 'R2KitString+TxtFileName.hm'
       end
 
       def determine_language_given_path(path)
-        raise 'not going to implement'
-      end
-
-      def read_file(path, lang)
         raise 'not going to implement'
       end
 

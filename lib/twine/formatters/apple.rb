@@ -1,6 +1,6 @@
 module Twine
   module Formatters
-    class Apple < Abstract
+    class Apple < Abstract      
       def format_name
         'apple'
       end

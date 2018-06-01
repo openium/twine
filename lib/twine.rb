@@ -30,13 +30,22 @@ module Twine
   require 'twine/formatters'
   require 'twine/formatters/abstract'
   require 'twine/formatters/android'
-  require 'twine/formatters/android-tag'
   require 'twine/formatters/apple'
   require 'twine/formatters/django'
   require 'twine/formatters/flash'
   require 'twine/formatters/gettext'
   require 'twine/formatters/jquery'
   require 'twine/formatters/tizen'
+
+  require 'twine/formatters/android-tag'
+  require 'twine/formatters/apple-swift'
+  require 'twine/formatters/apple-swift-tag'
+  require 'twine/formatters/apple-objc-header'
+  require 'twine/formatters/apple-objc-impl'
+  require 'twine/formatters/apple-objc-tag-header'
+  require 'twine/formatters/apple-objc-tag-impl'
+  #require 'twine/formatters/open-explore'
+  
   require 'twine/runner'
   require 'twine/cli'
 end

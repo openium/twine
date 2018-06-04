@@ -47,6 +47,10 @@ fileprivate let kStringsFileName = "#{stringFileName}"
 extension R2String {)
       end
 
+      def format_value(value)
+        value.gsub("\"", "\\\"")
+      end
+
       def format_section_header(section)
         "    // MARK: - #{section.name}"
       end

@@ -29,7 +29,7 @@ module Twine
 
       def format_file(lang)
         filePath = Pathname.new(@options[:output_path])
-        self.stringFileName = filePath.basename.to_s[0..-3]
+        self.stringFileName = filePath.basename.to_s[0..-4]
         impl = "R2Tag+" + self.stringFileName + ".h"
         @options[:output_path] = filePath.dirname + impl
         result = super + "\n\n@end\n"

@@ -37,7 +37,7 @@ module Twine
           end
         end
 
-        return
+        return super
       end
 
       def output_path_for_language(lang)
@@ -56,7 +56,7 @@ module Twine
 
       def read(io, lang)
         document = REXML::Document.new io, :compress_whitespace => %w{ string }
-
+        document.context[:attribute_quote] = :quote
         comment = nil
         document.root.children.each do |child|
           if child.is_a? REXML::Comment
@@ -97,16 +97,16 @@ module Twine
       end
 
       def format_key_value(definition, lang)
-        translatable = ""
-        if definition.tags.include? "notranslation"
-          translatable = " translatable=\"false\""
-        end
         value = definition.translation_for_lang(lang)
-        "\t<string name=\"%{key}\"#{translatable}>%{value}</string>" % { key: format_key(definition.key.dup), value: format_value(value.dup) }
+        key_value_pattern % { key: format_key(definition.key.dup), value: format_value(value.dup), translatable: format_translatable(definition) }
+      end
+
+      def format_translatable(definition)
+        " translatable=\"false\"" if definition.matches_tags?([["notranslation"]], false)
       end
 
       def key_value_pattern
-        
+        "\t<string name=\"%{key}\"%{translatable}>%{value}</string>"
       end
 
       def gsub_unless(text, pattern, replacement)

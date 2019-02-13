@@ -44,6 +44,7 @@ module Twine
   require 'twine/formatters/apple-objc-impl'
   require 'twine/formatters/apple-objc-tag-header'
   require 'twine/formatters/apple-objc-tag-impl'
+  require 'twine/formatters/count'
   #require 'twine/formatters/open-explore'
   
   require 'twine/runner'

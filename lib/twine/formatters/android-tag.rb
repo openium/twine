@@ -97,7 +97,7 @@ module Twine
       end
 
       def key_value_pattern
-        "\t<string name=\"%{key}\" translatable=\"false\">%{value}</string>"
+        "\t<string name=\"tag_%{key}\" translatable=\"false\">%{value}</string>"
       end
 
       def gsub_unless(text, pattern, replacement)
